@@ -55,7 +55,7 @@ h2 { font-size: 17px; font-weight: 650; }
 h3 { font-size: 14px; font-weight: 650; }
 p { color: var(--muted); line-height: 1.55; }
 
-.app-shell { display: grid; grid-template-columns: auto 1fr; height: 100%; }
+.app-shell { min-height: 0; display: grid; grid-template-columns: auto 1fr; height: 100%; overflow: hidden; }
 .sidebar { width: 232px; min-width: 232px; display: flex; flex-direction: column; border-right: 1px solid var(--border-soft); background: var(--sidebar); transition: width 160ms ease, min-width 160ms ease; }
 .sidebar.collapsed { width: 68px; min-width: 68px; }
 .brand-row { height: 70px; display: flex; align-items: center; gap: 10px; padding: 0 17px; border-bottom: 1px solid var(--border-soft); }
@@ -73,13 +73,14 @@ p { color: var(--muted); line-height: 1.55; }
 .privacy-state { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
-.main-shell { min-width: 0; display: grid; grid-template-rows: 70px 1fr; }
+.main-shell { min-width: 0; min-height: 0; display: grid; grid-template-rows: 70px minmax(0, 1fr); overflow: hidden; }
 .topbar { padding: 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--border-soft); background: var(--bg); }
 .eyebrow { margin-bottom: 3px; font-size: 10px; color: var(--subtle); text-transform: uppercase; font-weight: 700; }
 .topbar-status { display: flex; align-items: center; gap: 7px; }
 .topbar-status > div { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid var(--border-soft); border-radius: 5px; color: var(--muted); font-size: 11px; }
 .topbar-status .private { color: var(--accent-strong); border-color: rgba(56, 182, 165, 0.25); }
 .view-container { min-height: 0; overflow: auto; background: var(--bg); }
+.view-container.chat-view { overflow: hidden; }
 
 .icon-button { width: 34px; height: 34px; flex: 0 0 34px; display: inline-grid; place-items: center; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); cursor: pointer; }
 .icon-button:hover:not(:disabled) { background: var(--surface-hover); }
@@ -135,14 +136,14 @@ p { color: var(--muted); line-height: 1.55; }
 .status-pill.unknown { color: var(--muted); background: var(--surface-hover); }
 .status-pill.unavailable { color: var(--danger); background: rgba(225,111,116,.08); }
 
-.chat-layout { height: 100%; min-height: 540px; display: grid; grid-template-columns: 245px 1fr; }
-.conversation-rail { padding: 13px; border-right: 1px solid var(--border-soft); background: var(--sidebar); }
+.chat-layout { min-height: 0; height: 100%; display: grid; grid-template-columns: 245px minmax(0, 1fr); overflow: hidden; }
+.conversation-rail { min-height: 0; overflow-y: auto; padding: 13px; border-right: 1px solid var(--border-soft); background: var(--sidebar); }
 .new-chat-button { width: 100%; height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 11px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); cursor: pointer; }
 .rail-search { height: 34px; margin-top: 10px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid var(--border-soft); border-radius: 5px; color: var(--subtle); background: var(--input); }
 .rail-search.wide { width: min(420px, calc(100% - 44px)); margin: 18px 22px 0; }
 .rail-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 11px; }
 .conversation-empty { padding: 48px 8px; text-align: center; color: var(--subtle); font-size: 11px; }
-.chat-workspace { min-width: 0; display: grid; grid-template-rows: auto 1fr auto; }
+.chat-workspace { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
 .chat-controls { min-height: 59px; display: flex; align-items: end; gap: 9px; padding: 9px 16px; border-bottom: 1px solid var(--border-soft); }
 .chat-controls label { width: min(250px, 34%); color: var(--subtle); font-size: 9px; font-weight: 700; text-transform: uppercase; }
 .chat-controls select { width: 100%; height: 31px; margin-top: 4px; padding: 0 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--input); color: var(--text); font-size: 11px; text-transform: none; }
@@ -153,7 +154,7 @@ p { color: var(--muted); line-height: 1.55; }
 .chat-runtime-state.busy > span { background: var(--amber); box-shadow: 0 0 0 3px rgba(228,170,87,.1); }
 .chat-runtime-state.crashed > span, .chat-runtime-state.error > span { background: var(--danger); }
 .chat-runtime-state small { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.chat-stage { min-height: 0; position: relative; display: grid; }
+.chat-stage { min-height: 0; position: relative; display: grid; overflow: hidden; }
 .chat-error { position: absolute; z-index: 2; top: 0; right: 0; left: 0; }
 .chat-empty { align-self: center; justify-self: center; width: min(460px, calc(100% - 32px)); text-align: center; }
 .brand-orbit { width: 52px; height: 52px; margin: 0 auto 16px; display: grid; place-items: center; border: 1px solid rgba(56,182,165,.28); border-radius: 50%; color: var(--accent-strong); background: var(--accent-soft); }
@@ -164,7 +165,7 @@ p { color: var(--muted); line-height: 1.55; }
 .conversation-item.active { border-color: var(--border-soft); background: var(--surface); }
 .conversation-item span { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-item small { color: var(--subtle); font-size: 9px; }
-.message-viewport { min-height: 0; overflow-y: auto; padding: 18px max(24px, calc((100% - 780px) / 2)); }
+.message-viewport { min-height: 0; height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 18px max(24px, calc((100% - 780px) / 2)); scrollbar-gutter: stable; }
 .message-viewport.has-error { padding-top: 66px; }
 .chat-message { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: 15px 0; border-bottom: 1px solid var(--border-soft); }
 .chat-message:last-child { border-bottom: 0; }

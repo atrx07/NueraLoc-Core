@@ -75,7 +75,7 @@ export function App() {
             <div className="private" title="Normal desktop IPC does not expose a network port"><ShieldCheck size={15} /><span>Private</span></div>
           </div>
         </header>
-        <section className="view-container">
+        <section className={`view-container ${activeView === "chat" ? "chat-view" : ""}`}>
           {activeView === "hardware" ? <HardwareView /> : activeView === "settings" ? <SettingsView /> : <WorkspaceView view={activeView} />}
         </section>
       </main>

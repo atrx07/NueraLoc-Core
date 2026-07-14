@@ -31,6 +31,7 @@ import {
 } from "./model-selection";
 
 const LAST_MODEL_KEY = "neuraloc.lastModelId";
+const AUTO_SCROLL_THRESHOLD_PX = 48;
 
 type MessageState = "pending" | "streaming" | "complete" | "cancelled" | "error";
 
@@ -58,6 +59,7 @@ export function ChatWorkspace() {
   const stateSequences = useRef(new Map<string, number>());
   const usageSequences = useRef(new Map<string, number>());
   const messageViewport = useRef<HTMLDivElement | null>(null);
+  const autoScrollToBottom = useRef(true);
 
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
@@ -147,7 +149,7 @@ export function ChatWorkspace() {
 
   useEffect(() => {
     const viewport = messageViewport.current;
-    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    if (viewport && autoScrollToBottom.current) viewport.scrollTop = viewport.scrollHeight;
   }, [messages]);
 
   const groups = useMemo(() => groupChatModels(models), [models]);
@@ -238,6 +240,7 @@ export function ChatWorkspace() {
       .filter((message) => message.content.length > 0)
       .map((message) => ({ role: message.role, content: message.content }));
     const requestMessages = [...history, { role: "user" as const, content }];
+    autoScrollToBottom.current = true;
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setInput("");
     setActiveJobId(jobId);
@@ -283,6 +286,7 @@ export function ChatWorkspace() {
   async function newConversation() {
     if (activeJobId) await cancelGeneration();
     setConversationId(crypto.randomUUID());
+    autoScrollToBottom.current = true;
     setMessages([]);
     setInput("");
     setError(null);
@@ -293,6 +297,13 @@ export function ChatWorkspace() {
       event.preventDefault();
       void sendMessage();
     }
+  }
+
+  function handleMessageScroll() {
+    const viewport = messageViewport.current;
+    if (!viewport) return;
+    const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    autoScrollToBottom.current = distanceFromBottom <= AUTO_SCROLL_THRESHOLD_PX;
   }
 
   const statusCopy = chatStatus(runtimeStatus, selectedModel);
@@ -355,7 +366,7 @@ export function ChatWorkspace() {
         {selectedModel && !modelReady
           ? <button className="primary-button" disabled={modelOperation !== null} onClick={() => void loadModel(selectedModel)} type="button">{modelOperation === "load" ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} Load model</button>
           : !selectedModel && <button className="secondary-button" onClick={() => setActiveView("models")} type="button"><Download size={16} /> Find a model</button>}
-      </div> : <div aria-live="polite" className={`message-viewport ${error ? "has-error" : ""}`} ref={messageViewport}>
+      </div> : <div aria-live="polite" className={`message-viewport ${error ? "has-error" : ""}`} onScroll={handleMessageScroll} ref={messageViewport}>
         {messages.map((message) => <article className={`chat-message ${message.role}`} key={message.id}>
           <div className="message-avatar">{message.role === "user" ? <User size={15} /> : <Bot size={15} />}</div>
           <div className="message-body">
