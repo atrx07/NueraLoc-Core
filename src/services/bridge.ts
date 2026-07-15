@@ -320,6 +320,17 @@ export const bridge = {
     });
   },
 
+  async branchConversation(
+    sourceConversationId: string,
+    newConversationId: string,
+    throughMessageId: string | null,
+  ): Promise<ConversationDetail> {
+    if (!isTauri()) throw new Error("Conversation branching is available in the desktop app.");
+    return invoke<ConversationDetail>("branch_conversation", {
+      request: { sourceConversationId, newConversationId, throughMessageId },
+    });
+  },
+
   async confirmDeleteConversation(title: string): Promise<boolean> {
     const message = `Delete ${title} and all of its messages from local history?`;
     if (!isTauri()) return window.confirm(message);
@@ -593,6 +604,8 @@ function demoConversationSummary(): ConversationSummary {
     contextStrategy: "full_history",
     pinned: true,
     messageCount: 2,
+    sourceConversationId: null,
+    branchMessageId: null,
     createdAt: "2026-07-15T09:00:00Z",
     updatedAt: "2026-07-15T09:01:00Z",
   };
@@ -611,6 +624,7 @@ function demoConversationDetail(): ConversationDetail {
         id: "demo-user-message",
         conversationId: summary.id,
         parentId: null,
+        sourceMessageId: null,
         role: "user",
         content: "Review the conversation persistence design.",
         state: "complete",
@@ -626,6 +640,7 @@ function demoConversationDetail(): ConversationDetail {
         id: "demo-assistant-message",
         conversationId: summary.id,
         parentId: "demo-user-message",
+        sourceMessageId: null,
         role: "assistant",
         content: "The turn is persisted before inference and finalized after streaming completes.",
         state: "complete",

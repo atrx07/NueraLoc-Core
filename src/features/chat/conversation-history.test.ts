@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ConversationMessage, ConversationSummary } from "../../types/domain";
 import {
+  conversationMaxOutputTokens,
   generationHistory,
   localMessagesFromConversation,
   rememberedConversation,
+  retryPlan,
 } from "./conversation-history";
 
 const summary: ConversationSummary = {
@@ -17,6 +19,8 @@ const summary: ConversationSummary = {
   contextStrategy: "full_history",
   pinned: false,
   messageCount: 2,
+  sourceConversationId: null,
+  branchMessageId: null,
   createdAt: "2026-07-15T00:00:00Z",
   updatedAt: "2026-07-15T00:00:01Z",
 };
@@ -26,6 +30,7 @@ function message(overrides: Partial<ConversationMessage>): ConversationMessage {
     id: "message-1",
     conversationId: "conversation-1",
     parentId: null,
+    sourceMessageId: null,
     role: "user",
     content: "Hello",
     state: "complete",
@@ -81,5 +86,33 @@ describe("conversation history", () => {
       { role: "assistant", content: "Done" },
       { role: "user", content: "Again" },
     ]);
+  });
+
+  it("plans first-turn and later retries without mutating the original path", () => {
+    const firstTurn = localMessagesFromConversation([
+      message({ id: "user-1", position: 1 }),
+      message({ id: "assistant-1", role: "assistant", content: "First", position: 2 }),
+    ]);
+    expect(retryPlan(firstTurn, "assistant-1")).toEqual({
+      content: "Hello",
+      branchThroughMessageId: null,
+    });
+
+    const laterTurn = [
+      ...firstTurn,
+      { ...firstTurn[0], id: "user-2", content: "Try again" },
+      { ...firstTurn[1], id: "assistant-2", content: "Second" },
+    ];
+    expect(retryPlan(laterTurn, "assistant-2")).toEqual({
+      content: "Try again",
+      branchThroughMessageId: "assistant-1",
+    });
+    expect(retryPlan(laterTurn, "user-2")).toBeNull();
+  });
+
+  it("restores only bounded persisted output-token settings", () => {
+    expect(conversationMaxOutputTokens({ maxOutputTokens: 768 })).toBe(768);
+    expect(conversationMaxOutputTokens({ maxOutputTokens: 0 })).toBe(1024);
+    expect(conversationMaxOutputTokens({ maxOutputTokens: "768" })).toBe(1024);
   });
 });

@@ -192,8 +192,13 @@ p { color: var(--muted); line-height: 1.55; }
 .message-content { color: var(--text); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; white-space: pre-wrap; }
 .message-pending, .message-terminal { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
 .message-terminal.error { color: var(--danger); }
-.message-usage { min-height: 24px; margin-top: 10px; padding-top: 7px; display: flex; align-items: center; gap: 13px; border-top: 1px solid var(--border-soft); color: var(--subtle); font-size: 9px; }
+.message-footer { min-height: 28px; margin-top: 10px; padding-top: 7px; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border-soft); }
+.message-usage { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 13px; color: var(--subtle); font-size: 9px; }
 .message-usage span { white-space: nowrap; }
+.message-actions { flex: 0 0 auto; display: flex; gap: 3px; margin-left: auto; }
+.message-action { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--subtle); cursor: pointer; }
+.message-action:hover:not(:disabled), .message-action:focus-visible { color: var(--accent-strong); background: var(--accent-soft); }
+.message-action:disabled { opacity: .35; cursor: default; }
 .chat-status-strip { min-width: 0; min-height: 33px; display: flex; align-items: center; gap: 16px; padding: 0 18px; overflow: hidden; border-top: 1px solid var(--border-soft); background: var(--input); color: var(--muted); font-size: 9px; }
 .chat-status-strip > div { min-width: 0; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .chat-status-strip > div + div { padding-left: 16px; border-left: 1px solid var(--border-soft); }
@@ -367,7 +372,7 @@ p { color: var(--muted); line-height: 1.55; }
   .conversation-rail.open { display: block; }
   .history-toggle { display: grid; flex: 0 0 31px; margin-left: 0 !important; }
   .conversation-backdrop { display: block; position: absolute; z-index: 4; inset: 0; border: 0; background: rgba(0,0,0,.38); cursor: pointer; }
-  .chat-status-strip .runtime-route { display: none; }
+  .chat-status-strip .runtime-route, .chat-status-strip .prompt-route { display: none; }
   .prompt-library-body { grid-template-columns: 238px minmax(0, 1fr); }
   .prompt-metadata-grid { grid-template-columns: repeat(2, minmax(90px, 1fr)); }
   .prompt-metadata-grid > div:nth-child(2) { border-right: 0; }
@@ -402,7 +407,6 @@ p { color: var(--muted); line-height: 1.55; }
   .message-viewport { padding-right: 16px; padding-left: 16px; }
   .chat-status-strip { gap: 9px; padding: 0 12px; }
   .chat-status-strip > div + div { padding-left: 9px; }
-  .chat-status-strip > div:nth-child(4) { display: none; }
   .context-status progress { width: 48px; }
   .prompt-library-body { grid-template-columns: 1fr; grid-template-rows: minmax(170px, 34%) minmax(0, 1fr); }
   .prompt-library-rail { border-right: 0; border-bottom: 1px solid var(--border-soft); }

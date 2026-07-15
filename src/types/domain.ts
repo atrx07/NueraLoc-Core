@@ -304,6 +304,8 @@ export interface ConversationSummary {
   contextStrategy: string;
   pinned: boolean;
   messageCount: number;
+  sourceConversationId: string | null;
+  branchMessageId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -319,6 +321,7 @@ export interface ConversationMessage {
   id: string;
   conversationId: string;
   parentId: string | null;
+  sourceMessageId: string | null;
   role: ConversationMessageRole;
   content: string;
   state: ConversationMessageState;

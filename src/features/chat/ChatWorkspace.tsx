@@ -9,6 +9,7 @@ import {
   Download,
   FileText,
   Gauge,
+  GitBranch,
   ImagePlus,
   LoaderCircle,
   PanelLeft,
@@ -16,6 +17,7 @@ import {
   Pin,
   PinOff,
   Plus,
+  RotateCcw,
   Search,
   SlidersHorizontal,
   Sparkles,
@@ -29,6 +31,7 @@ import { useAppStore } from "../../stores/app-store";
 import type {
   ChatGenerationState,
   CompiledPrompt,
+  ConversationDetail,
   ConversationSummary,
   EngineRuntimeStatus,
   ModelRecord,
@@ -36,9 +39,11 @@ import type {
 } from "../../types/domain";
 import { calculateChatMetrics } from "./chat-metrics";
 import {
+  conversationMaxOutputTokens,
   generationHistory,
   localMessagesFromConversation,
   rememberedConversation,
+  retryPlan,
   type LocalMessage,
   type LocalMessageState,
 } from "./conversation-history";
@@ -73,6 +78,8 @@ export function ChatWorkspace() {
   const [modelOperation, setModelOperation] = useState<"load" | "stop" | null>(null);
   const [conversationId, setConversationId] = useState<string>(() => crypto.randomUUID());
   const [messages, setMessages] = useState<LocalMessage[]>([]);
+  const [maxOutputTokens, setMaxOutputTokens] = useState(1024);
+  const [activeBranchSourceId, setActiveBranchSourceId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +89,10 @@ export function ChatWorkspace() {
   const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [exportingConversationId, setExportingConversationId] = useState<string | null>(null);
+  const [messageOperation, setMessageOperation] = useState<{
+    messageId: string;
+    kind: "branch" | "retry";
+  } | null>(null);
   const tokenSequences = useRef(new Map<string, number>());
   const stateSequences = useRef(new Map<string, number>());
   const usageSequences = useRef(new Map<string, number>());
@@ -108,6 +119,8 @@ export function ChatWorkspace() {
         const detail = await bridge.getConversation(savedConversation.id);
         setConversationId(detail.conversation.id);
         setMessages(localMessagesFromConversation(detail.messages));
+        setMaxOutputTokens(conversationMaxOutputTokens(detail.conversation.generationSettings));
+        setActiveBranchSourceId(detail.conversation.sourceConversationId);
         setSelectedModelId(detail.conversation.modelId);
         writeLastModelId(detail.conversation.modelId);
         const restoredPrompt = detail.conversation.promptVersionId
@@ -122,6 +135,7 @@ export function ChatWorkspace() {
         return;
       }
       writeLastConversationId(null);
+      setActiveBranchSourceId(null);
       const activeModel = status.modelId && isEngineActive(status)
         && availableModels.some((model) => model.id === status.modelId && model.verificationState === "ready")
         ? status.modelId
@@ -266,6 +280,8 @@ export function ChatWorkspace() {
         : null;
       setConversationId(detail.conversation.id);
       setMessages(localMessagesFromConversation(detail.messages));
+      setMaxOutputTokens(conversationMaxOutputTokens(detail.conversation.generationSettings));
+      setActiveBranchSourceId(detail.conversation.sourceConversationId);
       setSelectedModelId(detail.conversation.modelId);
       setSelectedPrompt(restoredPrompt);
       setInput("");
@@ -321,6 +337,8 @@ export function ChatWorkspace() {
       if (summary.id === conversationId) {
         setConversationId(crypto.randomUUID());
         setMessages([]);
+        setMaxOutputTokens(1024);
+        setActiveBranchSourceId(null);
         setInput("");
         writeLastConversationId(null);
       }
@@ -431,9 +449,13 @@ export function ChatWorkspace() {
     }
   }
 
-  async function sendMessage() {
-    const content = input.trim();
-    if (!content || !modelReady || !runtimeStatus?.sessionId || generating) return;
+  async function generateMessage(
+    content: string,
+    targetConversationId: string,
+    targetMessages: LocalMessage[],
+    targetMaxOutputTokens: number,
+  ) {
+    if (!content || !modelReady || !runtimeStatus?.sessionId || activeJobId) return;
     setError(null);
     const jobId = crypto.randomUUID();
     const assistantMessageId = crypto.randomUUID();
@@ -453,26 +475,28 @@ export function ChatWorkspace() {
       usage: null,
       terminalReason: null,
     };
-    const history = generationHistory(messages);
+    const history = generationHistory(targetMessages);
     const requestMessages = chatMessagesWithSystemPrompt(selectedPrompt?.content ?? null, history, content);
     autoScrollToBottom.current = true;
-    setMessages((current) => [...current, userMessage, assistantMessage]);
+    setConversationId(targetConversationId);
+    setMessages([...targetMessages, userMessage, assistantMessage]);
+    setMaxOutputTokens(targetMaxOutputTokens);
     setInput("");
     setActiveJobId(jobId);
-    writeLastConversationId(conversationId);
+    writeLastConversationId(targetConversationId);
     tokenSequences.current.delete(jobId);
     stateSequences.current.delete(jobId);
     usageSequences.current.delete(jobId);
     try {
       const result = await bridge.startChatGeneration({
         jobId,
-        conversationId,
+        conversationId: targetConversationId,
         userMessageId: userMessage.id,
         messageId: assistantMessageId,
         sessionId: runtimeStatus.sessionId,
         promptVersionId: selectedPrompt?.versionId ?? null,
         messages: requestMessages,
-        maxOutputTokens: 1024,
+        maxOutputTokens: targetMaxOutputTokens,
       });
       setMessages((current) => current.map((message) => message.id === assistantMessageId
         ? {
@@ -493,6 +517,78 @@ export function ChatWorkspace() {
     }
   }
 
+  async function sendMessage() {
+    const content = input.trim();
+    if (!content || generating) return;
+    await generateMessage(content, conversationId, messages, maxOutputTokens);
+  }
+
+  function activateBranchedConversation(detail: ConversationDetail): LocalMessage[] {
+    const branchedMessages = localMessagesFromConversation(detail.messages);
+    const branchMaxOutputTokens = conversationMaxOutputTokens(detail.conversation.generationSettings);
+    setConversationId(detail.conversation.id);
+    setMessages(branchedMessages);
+    setMaxOutputTokens(branchMaxOutputTokens);
+    setActiveBranchSourceId(detail.conversation.sourceConversationId);
+    setSelectedModelId(detail.conversation.modelId);
+    setInput("");
+    setRenamingConversationId(null);
+    setHistoryOpen(false);
+    autoScrollToBottom.current = true;
+    writeLastConversationId(detail.conversation.id);
+    writeLastModelId(detail.conversation.modelId);
+    writeLastPromptId(detail.conversation.promptVersionId);
+    setConversations((current) => [
+      conversationSummaryFromDetail(detail),
+      ...current.filter((conversation) => conversation.id !== detail.conversation.id),
+    ]);
+    return branchedMessages;
+  }
+
+  async function branchFromMessage(messageId: string) {
+    if (generating || messageOperation) return;
+    setMessageOperation({ messageId, kind: "branch" });
+    setError(null);
+    try {
+      const detail = await bridge.branchConversation(conversationId, crypto.randomUUID(), messageId);
+      activateBranchedConversation(detail);
+      await refreshConversations(conversationSearch);
+    } catch (caught) {
+      setError(errorMessage(caught, "The conversation branch could not be created."));
+    } finally {
+      setMessageOperation(null);
+    }
+  }
+
+  async function retryAssistantMessage(messageId: string) {
+    if (generating || messageOperation || !modelReady) return;
+    const plan = retryPlan(messages, messageId);
+    if (!plan) {
+      setError("The user turn for this response could not be found.");
+      return;
+    }
+    setMessageOperation({ messageId, kind: "retry" });
+    setError(null);
+    try {
+      const detail = await bridge.branchConversation(
+        conversationId,
+        crypto.randomUUID(),
+        plan.branchThroughMessageId,
+      );
+      const branchedMessages = activateBranchedConversation(detail);
+      await generateMessage(
+        plan.content,
+        detail.conversation.id,
+        branchedMessages,
+        conversationMaxOutputTokens(detail.conversation.generationSettings),
+      );
+    } catch (caught) {
+      setError(errorMessage(caught, "The response could not be retried in a new branch."));
+    } finally {
+      setMessageOperation(null);
+    }
+  }
+
   async function cancelGeneration() {
     if (!activeJobId) return;
     try {
@@ -507,6 +603,8 @@ export function ChatWorkspace() {
     setConversationId(crypto.randomUUID());
     autoScrollToBottom.current = true;
     setMessages([]);
+    setMaxOutputTokens(1024);
+    setActiveBranchSourceId(null);
     setInput("");
     setError(null);
     setRenamingConversationId(null);
@@ -563,7 +661,7 @@ export function ChatWorkspace() {
             : <>
                 <button className={`conversation-item ${summary.id === conversationId ? "active" : ""}`} disabled={generating} onClick={() => void openConversation(summary)} type="button">
                   <span>{summary.title}</span>
-                  <small>{summary.modelName} / {summary.messageCount.toLocaleString()} messages</small>
+                  <small>{summary.sourceConversationId ? "Branch / " : ""}{summary.modelName} / {summary.messageCount.toLocaleString()} messages</small>
                 </button>
                 <div className="conversation-actions">
                   <button aria-label={summary.pinned ? "Unpin conversation" : "Pin conversation"} className="conversation-action" disabled={generating && summary.id === conversationId} onClick={() => void toggleConversationPinned(summary)} title={summary.pinned ? "Unpin conversation" : "Pin conversation"} type="button">{summary.pinned ? <PinOff size={13} /> : <Pin size={13} />}</button>
@@ -654,10 +752,30 @@ export function ChatWorkspace() {
                   : message.state === "error"
                   ? <div className="message-terminal error">Generation failed</div>
                   : <div className="message-pending"><LoaderCircle className="spin" size={14} /> Thinking locally</div>}
-            {message.usage && <footer className="message-usage">
-              <span>{message.usage.outputTokens.toLocaleString()} output</span>
-              <span>{message.usage.promptTokens.toLocaleString()} prompt</span>
-              <span>{message.usage.tokensPerSecond > 0 ? `${message.usage.tokensPerSecond.toFixed(1)} tok/s` : "Speed unavailable"}</span>
+            {message.state !== "pending" && message.state !== "streaming" && <footer className="message-footer">
+              {message.usage && <div className="message-usage">
+                <span>{message.usage.outputTokens.toLocaleString()} output</span>
+                <span>{message.usage.promptTokens.toLocaleString()} prompt</span>
+                <span>{message.usage.tokensPerSecond > 0 ? `${message.usage.tokensPerSecond.toFixed(1)} tok/s` : "Speed unavailable"}</span>
+              </div>}
+              <div aria-label="Message actions" className="message-actions">
+                <button
+                  aria-label="Branch conversation from this message"
+                  className="message-action"
+                  disabled={generating || messageOperation !== null}
+                  onClick={() => void branchFromMessage(message.id)}
+                  title="Branch from here"
+                  type="button"
+                >{messageOperation?.messageId === message.id && messageOperation.kind === "branch" ? <LoaderCircle className="spin" size={13} /> : <GitBranch size={13} />}</button>
+                {message.role === "assistant" && <button
+                  aria-label="Retry response in a new branch"
+                  className="message-action"
+                  disabled={generating || messageOperation !== null || !modelReady}
+                  onClick={() => void retryAssistantMessage(message.id)}
+                  title={modelReady ? "Retry in new branch" : "Load this conversation's model to retry"}
+                  type="button"
+                >{messageOperation?.messageId === message.id && messageOperation.kind === "retry" ? <LoaderCircle className="spin" size={13} /> : <RotateCcw size={13} />}</button>}
+              </div>
             </footer>}
           </div>
         </article>)}
@@ -678,6 +796,7 @@ export function ChatWorkspace() {
         </div>
         <div title="Current generation state"><Activity size={13} /><span>{generating ? "Generating" : modelOperation === "load" ? "Loading" : modelReady ? "Ready" : "Idle"}</span></div>
         <div title="Tokens in the latest response"><span>Output</span><strong>{tokenMetric(chatMetrics.outputTokens, chatMetrics.outputApproximate)}</strong></div>
+        {activeBranchSourceId && <div title="This conversation is an independent durable branch"><GitBranch size={13} /><span>Branch</span></div>}
         <div className="prompt-route" title="Immutable system prompt bound to this conversation"><FileText size={13} /><span>Prompt</span><strong>{selectedPrompt ? `${selectedPrompt.stableName} v${selectedPrompt.version}` : "None"}</strong></div>
         <div title="Latest measured generation speed"><span>Speed</span><strong>{chatMetrics.tokensPerSecond && chatMetrics.tokensPerSecond > 0 ? `${chatMetrics.tokensPerSecond.toFixed(1)} tok/s` : "--"}</strong></div>
         <div className="runtime-route" title="Active inference route and backend build"><Cpu size={13} /><span>{runtimeActive ? `CPU / ${runtimeStatus?.backendVersion ?? "llama.cpp"}` : "CPU / offline"}</span></div>
@@ -702,6 +821,26 @@ export function ChatWorkspace() {
       </div>
     </div>
   </div>;
+}
+
+function conversationSummaryFromDetail(detail: ConversationDetail): ConversationSummary {
+  const conversation = detail.conversation;
+  return {
+    id: conversation.id,
+    title: conversation.title,
+    modelId: conversation.modelId,
+    modelName: conversation.modelName,
+    promptVersionId: conversation.promptVersionId,
+    promptName: conversation.promptName,
+    promptVersion: conversation.promptVersion,
+    contextStrategy: conversation.contextStrategy,
+    pinned: conversation.pinned,
+    messageCount: detail.messages.length,
+    sourceConversationId: conversation.sourceConversationId,
+    branchMessageId: conversation.branchMessageId,
+    createdAt: conversation.createdAt,
+    updatedAt: conversation.updatedAt,
+  };
 }
 
 function chatStatus(status: EngineRuntimeStatus | null, model: ModelRecord | null): string {
