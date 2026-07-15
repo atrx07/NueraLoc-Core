@@ -2,12 +2,10 @@ import {
   AudioLines,
   Boxes,
   Download,
-  FilePlus2,
   FileText,
   ImagePlus,
   Mic,
   Plus,
-  Search,
   Sparkles,
   Square,
 } from "lucide-react";
@@ -17,10 +15,6 @@ import { ModelManagerView } from "../models/ModelManagerView";
 
 function EmptyState({ icon: Icon, title, detail, action, onAction }: { icon: typeof Boxes; title: string; detail: string; action: string; onAction?: () => void }) {
   return <div className="empty-state"><span><Icon size={27} /></span><h2>{title}</h2><p>{detail}</p><button className="primary-button" onClick={onAction} type="button"><Plus size={16} />{action}</button></div>;
-}
-
-function PromptWorkspace() {
-  return <div className="library-workspace"><div className="section-toolbar"><div><h2>System prompts</h2><p>Versioned profiles control behavior without changing application permissions.</p></div><div className="toolbar-actions"><button className="secondary-button" type="button"><FilePlus2 size={16} /> Import</button><button className="primary-button" type="button"><Plus size={16} /> New prompt</button></div></div><div className="rail-search wide"><Search size={15} /><input aria-label="Search prompts" placeholder="Search prompts and tags" /></div><EmptyState icon={FileText} title="Your prompt library is empty" detail="Create a profile or import Markdown with optional YAML front matter." action="Create prompt" /></div>;
 }
 
 const emptyByView: Partial<Record<NavigationId, { icon: typeof Boxes; title: string; detail: string; action: string }>> = {
@@ -36,7 +30,6 @@ export function WorkspaceView({ view }: { view: NavigationId }) {
   const setActiveView = useAppStore((state) => state.setActiveView);
   if (view === "chat") return null;
   if (view === "models") return <ModelManagerView />;
-  if (view === "prompts") return <PromptWorkspace />;
   const state = emptyByView[view];
   if (!state) return null;
   const destinations: Partial<Record<NavigationId, NavigationId>> = { images: "models", speech: "models", tts: "models", gallery: "images", downloads: "models", logs: "hardware" };

@@ -19,6 +19,7 @@ export interface ChatMetrics {
 export function calculateChatMetrics(
   messages: ChatMetricMessage[],
   contextCapacity: number | null,
+  systemPromptTokens = 0,
 ): ChatMetrics {
   const latestUsageIndex = findLatestUsageIndex(messages);
   const latestUsage = latestUsageIndex >= 0 ? messages[latestUsageIndex].usage : null;
@@ -28,8 +29,8 @@ export function calculateChatMetrics(
   );
   const contextTokens = latestUsage
     ? latestUsage.promptTokens + latestUsage.outputTokens + unmeasuredTokens
-    : messages.length > 0
-      ? estimateTokenCount(messages.map((message) => message.content).join("\n"))
+    : messages.length > 0 || systemPromptTokens > 0
+      ? systemPromptTokens + estimateTokenCount(messages.map((message) => message.content).join("\n"))
       : null;
   const contextApproximate = contextTokens !== null
     && (latestUsage === null || unmeasuredMessages.length > 0);

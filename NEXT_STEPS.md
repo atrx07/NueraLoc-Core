@@ -6,7 +6,7 @@ This plan covers the next checkpoint only: a usable local GGUF chat path with mo
 
 Completed on 2026-07-13: shared model-library preparation, step 1 local discovery/import, and the basic bounded GGUF metadata portion of step 3. NeuraLoc-Core now has migration-backed model records, guarded native file/folder selection, recursive cancellable scans with sequenced progress events, path/file-identity deduplication, missing/invalid states, metadata-only removal, and a functional installed-model UI.
 
-Step 2's CPU runtime gate and the basic Step 4/6 chat path are complete. On 2026-07-14 the concrete adapter loaded the user's Qwen3 4B Q4_K_M GGUF with pinned llama.cpp `b9986`, passed authenticated health/identity checks, streamed a bounded response with usage, cancelled a second request, stopped, and confirmed zero owned child processes. Chat now lists ready indexed models, remembers the last choice, loads/switches/unloads the selected model, gates the composer on the matching ready session, streams sequenced token batches, cancels the active generation, and shows the loaded context capacity with exact completed-turn and explicitly approximate in-progress usage. Step 5's secure prompt parser, immutable repository, migration, and typed command layer are complete. Immediate next work is the Prompt Library interface and immutable Chat prompt binding, then Step 7 conversation/message persistence, enforced context strategies, advanced selector fit behavior, and the verified catalog.
+Step 2's CPU runtime gate and the basic Step 4/6 chat path are complete. On 2026-07-14 the concrete adapter loaded the user's Qwen3 4B Q4_K_M GGUF with pinned llama.cpp `b9986`, passed authenticated health/identity checks, streamed a bounded response with usage, cancelled a second request, stopped, and confirmed zero owned child processes. Chat now lists ready indexed models, loads and streams locally, and shows exact/approximate context telemetry. Step 5 is complete for the current single selected-prompt layer: the secure parser/repository/commands, full Prompt Library management workspace, adjacent Chat selector, immutable binding, explicit prompt-change/new-conversation confirmation, system-role compilation, and prompt token telemetry are implemented. Immediate next work is Step 7 conversation/message persistence, followed by enforced context strategies, advanced selector fit behavior, multi-layer prompt composition, and the verified catalog.
 
 ## Dependency Map
 
@@ -126,7 +126,7 @@ Basic selector status: completed on 2026-07-14. Chat is backed by persisted mode
 
 Dependencies: shared repository/path work from step 1. Can run in parallel with steps 2 and 3.
 
-Backend status: completed on 2026-07-15. Migration 4, the bounded YAML 1.2 parser, path/dialog grant checks, immutable profile/version repository, duplicate/no-op detection, provenance, soft deletion, original/normalized export, exact-content compilation, and typed Tauri commands are implemented and covered by eight prompt tests. The Prompt Library interface and Chat selector/binding are the active slice.
+Status: completed on 2026-07-15 for the selected user-prompt layer. Migration 4, bounded parsing, path/dialog grants, immutable versions, provenance, soft deletion, export/compile commands, the management workspace, editor, search, pin/duplicate/delete actions, adjacent Chat selector, and immutable system-role binding are implemented. Durable conversation references arrive with Step 7; tool/project/memory layers remain later composition work.
 
 ### Import and persistence
 
@@ -150,7 +150,7 @@ Backend status: completed on 2026-07-15. Migration 4, the bounded YAML 1.2 parse
 
 Dependencies: steps 2, 4, and 5 plus working event sequencing.
 
-Basic streaming status: completed on 2026-07-14 using the no-custom-prompt path, with context visibility added on 2026-07-15. Rust owns the authenticated llama.cpp transport, validates bounded messages/output limits, parses bounded SSE data, batches sequenced token events, emits usage and terminal state, and cancels one active generation. Chat renders ephemeral user/assistant messages, ignores stale event sequences, and presents the loaded context capacity plus exact or explicitly approximate live usage. Prompt compilation, durable jobs/messages, retry, enforced context management, OOM fallback, and crash recovery remain before the full acceptance gate is complete.
+Basic streaming status: completed on 2026-07-14, with context visibility and immutable system-prompt compilation added on 2026-07-15. Rust owns the authenticated llama.cpp transport, validates bounded messages/output limits, parses bounded SSE data, batches sequenced token events, emits usage and terminal state, and cancels one active generation. Chat renders ephemeral user/assistant messages, sends the bound prompt as the first system role, ignores stale event sequences, and presents the loaded context capacity plus exact or explicitly approximate live usage. Durable jobs/messages, retry, enforced context management, OOM fallback, and crash recovery remain before the full acceptance gate is complete.
 
 ### Backend
 
@@ -205,8 +205,8 @@ Dependencies: step 1 import pipeline, step 3 metadata validation, the verified d
 
 1. **Model library checkpoint (completed 2026-07-13):** shared preparation + local discovery/import + basic GGUF metadata.
 2. **Runtime checkpoint (completed 2026-07-14 for CPU):** verified llama.cpp install + lifecycle/logging + real Qwen load/stream/stop/no-orphan validation.
-3. **Prompt checkpoint (next):** Markdown import/versioning + prompt selector; the model selector is already connected.
-4. **Chat checkpoint (in progress):** basic streaming/cancellation is complete; conversation persistence, context management, retry, and crash recovery remain.
+3. **Prompt checkpoint (completed 2026-07-15):** secure Markdown/text import, immutable versioning, management workspace, adjacent selector, and ephemeral Chat binding.
+4. **Chat persistence checkpoint (next):** basic streaming/cancellation is complete; durable conversations/messages, context management, retry, and crash recovery remain.
 5. **Catalog checkpoint:** signed metadata + resumable verified downloads.
 
 At every checkpoint run frontend build/tests, Rust format/check/test/clippy, migration tests from empty and prior schemas, fake-engine lifecycle tests where applicable, and a Tauri debug smoke test. Do not move to the next checkpoint with orphaned processes, destructive migration changes, unbounded file reads, or renderer-owned native/network access.

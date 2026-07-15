@@ -8,9 +8,9 @@ Current version: `0.1.0`
 
 ## Summary
 
-NeuraLoc-Core is an executable local-chat prototype built with Tauri 2, React, TypeScript, and Rust. It starts, creates its application data directories and SQLite database, exposes typed commands for app state, hardware, settings, local models, engine packages, llama.cpp runtime control, bounded chat generation, and immutable system prompts, and renders a polished desktop shell with functional Chat, Hardware, Settings, and Model Manager views. The pinned Windows x64 CPU llama.cpp package can be installed and verified, and a ready indexed GGUF can be selected from Chat, launched, health-checked, streamed, cancelled, stopped, and inspected without exposing the internal server or session token to the renderer.
+NeuraLoc-Core is an executable local-chat prototype built with Tauri 2, React, TypeScript, and Rust. It starts, creates its application data directories and SQLite database, exposes typed commands for app state, hardware, settings, local models, engine packages, llama.cpp runtime control, bounded chat generation, and immutable system prompts, and renders a polished desktop shell with functional Chat, Prompt Library, Hardware, Settings, and Model Manager views. The pinned Windows x64 CPU llama.cpp package can be installed and verified, and a ready indexed GGUF can be selected from Chat, launched, health-checked, streamed, cancelled, stopped, and inspected without exposing the internal server or session token to the renderer.
 
-This checkpoint is usable for ephemeral local chat, but it is not yet a complete local inference product. A local opt-in integration test loaded the user's Qwen3 4B Q4_K_M GGUF, authenticated the pinned `b9986` server, streamed a response with usage, cancelled a second active request, stopped the server, and confirmed zero owned child processes on 2026-07-14. The model file remains external and is not stored in the repository. The secure prompt import/versioning backend is complete; its management interface and Chat selector are not connected yet. Conversation persistence, context management, model-catalog download, image, speech, TTS, gallery, and the dedicated Logs workspace remain unfinished.
+This checkpoint is usable for ephemeral local chat with an optional immutable system-prompt version, but it is not yet a complete local inference product. A local opt-in integration test loaded the user's Qwen3 4B Q4_K_M GGUF, authenticated the pinned `b9986` server, streamed a response with usage, cancelled a second active request, stopped the server, and confirmed zero owned child processes on 2026-07-14. The model file remains external and is not stored in the repository. Conversation persistence, multi-layer prompt composition, enforced context management, model-catalog download, image, speech, TTS, gallery, and the dedicated Logs workspace remain unfinished.
 
 ## Implemented Functionality
 
@@ -23,10 +23,11 @@ This checkpoint is usable for ephemeral local chat, but it is not yet a complete
 - Functional Hardware view with refresh, CPU/RAM summary, detected accelerators, capability evidence, telemetry fields, and warnings.
 - Functional Settings view for theme, performance profile, model retention, idle timeout, internet access, web search, and local API state.
 - Functional Model Manager with native GGUF file import, recursive folder scanning, cancellation/progress, search, metadata/status rows, reverify, metadata-only removal, llama.cpp package controls, per-model load/stop controls, runtime health, lifecycle state, and retained-log inspection.
+- Functional Prompt Library with native Markdown/text import, search, pinned-first summaries, exact source inspection, local creation, immutable version editing, duplicate provenance, pin/unpin, original/normalized export, and soft deletion.
 - Functional Chat model selector backed by the persisted model library, grouped ready/unavailable choices, last-used preference, runtime reuse/load/switch/unload controls, visible lifecycle state, and a composer gate tied to the selected ready session.
-- Ephemeral Chat messages with Rust-owned streaming token batches, stop generation, terminal/error states, plain-text rendering, and prompt/output token plus tokens-per-second usage when llama.cpp reports it. Usage is rendered at the end of each assistant response. A compact live strip reports the loaded context capacity, exact completed-turn usage, explicitly approximate in-progress usage, output progress, generation state, measured speed, and active CPU/backend route. The mounted Chat workspace retains its in-memory messages and generation listeners while navigating elsewhere in the app. The composer remains pinned while the message viewport scrolls independently, and streaming follows the latest token only while the user stays near the bottom. Messages currently live only in renderer memory and do not survive an application restart.
+- Ephemeral Chat messages with Rust-owned streaming token batches, stop generation, terminal/error states, plain-text rendering, and prompt/output token plus tokens-per-second usage when llama.cpp reports it. The adjacent prompt selector remembers and compiles an immutable version, sends its exact content as the first system role, retains older bound versions across library edits, and requires confirmation/new-conversation creation for a mid-chat change. Usage is rendered at the end of each assistant response. A compact live strip reports loaded context capacity, exact/approximate usage, selected prompt version, output progress, generation state, speed, and CPU/backend route. The mounted Chat workspace retains its in-memory messages and generation listeners while navigating elsewhere in the app. Messages currently live only in renderer memory and do not survive an application restart.
 - Catalog and Downloads tabs remain visibly disabled until the verified catalog checkpoint.
-- Browser-only demo bridge for UI development when Tauri IPC is unavailable. Demo settings persist only for the current page session, hardware values are representative, and native model imports are unavailable.
+- Browser-only demo bridge for UI development when Tauri IPC is unavailable. Demo settings persist only for the current page session, hardware values are representative, a read-only sample prompt exercises library/selector layouts, and native mutations are unavailable.
 - Typed frontend domain interfaces for app snapshots, settings, hardware, local models, GGUF metadata, engine packages, runtime lifecycle/health/logs, chat requests/results/usage/events, scan/engine events, navigation, and IPC errors.
 - Shared adaptive binary-byte and model-metadata formatters with frontend unit tests.
 
@@ -123,12 +124,15 @@ NeuraLoc-Core/
 |   |   |   |-- chat-metrics.test.ts
 |   |   |   |-- chat-metrics.ts
 |   |   |   |-- model-selection.ts
-|   |   |   `-- model-selection.test.ts
+|   |   |   |-- model-selection.test.ts
+|   |   |   |-- prompt-selection.ts
+|   |   |   `-- prompt-selection.test.ts
 |   |   |-- hardware/HardwareView.tsx
 |   |   |-- models/
 |   |   |   |-- ModelManagerView.tsx
 |   |   |   |-- model-format.ts
 |   |   |   `-- model-format.test.ts
+|   |   |-- prompts/PromptLibraryView.tsx
 |   |   |-- settings/SettingsView.tsx
 |   |   `-- workspaces/WorkspaceView.tsx
 |   |-- services/bridge.ts
@@ -320,7 +324,7 @@ npm.cmd run tauri -- build --debug --no-bundle
 
 Current automated tests:
 
-- Frontend: 4 Vitest files, 10 tests for adaptive byte formatting, missing telemetry, model metadata, selector grouping/labels, selected-session readiness, and exact/approximate chat context metrics.
+- Frontend: 5 Vitest files, 14 tests for adaptive byte formatting, model metadata, selector grouping/readiness, exact/approximate context metrics including selected prompt estimates, immutable prompt restoration, and system-message ordering.
 - Rust: 38 passing default tests plus two ignored opt-in integration tests. Coverage includes eight prompt parser/service tests for exact-content handling, malformed/unsafe YAML rejection, metadata bounds, deterministic hashes, immutable versions, stale edits, duplicate provenance, soft deletion, historical reads, exports, and compilation, alongside the chat, hardware, database, GGUF, model, process, and package suites.
 - Opt-in package integration: the ignored test downloads the pinned official archive, completes install, runs the real `llama-server.exe --version --help` probe and observes build `9986`, verifies the exact files, and uninstalls in a temporary application-data directory; it passed on 2026-07-13.
 - Opt-in real-model integration: an environment-selected `llama-server.exe` and tensor-bearing GGUF are loaded with the same adapter, health-checked, required to return a known visible answer with thinking disabled, usage-checked, cancellation-checked, stopped, and checked for zero owned child processes. It passed with Qwen3 4B Q4_K_M and `b9986` on 2026-07-14.
@@ -335,11 +339,12 @@ The verified unpackaged Windows debug executable is:
 C:\Users\atrx07\atrx\NeuraLoc-Core\src-tauri\target\debug\neuraloc-core.exe
 ```
 
-Checkpoint size: 30,436,864 bytes, rebuilt on 2026-07-15 after the Prompt Library backend update. This is a debug executable, not a signed installer or release artifact. `src-tauri/target` is ignored by Git and can be regenerated.
+Checkpoint size: 30,440,960 bytes, rebuilt on 2026-07-15 after the Prompt Library UI and Chat binding update. This is a debug executable, not a signed installer or release artifact. `src-tauri/target` is ignored by Git and can be regenerated.
 
 ## Known Warnings and Limitations
 
 - `cargo clippy --all-targets` passes but reports expected dead-code warnings for scheduler and other interfaces that remain scaffolded.
+- Chat currently compiles one selected user prompt layer. Prompt metadata recommendations, tool-policy/project/memory layers, and the full layer inspector remain planned; system prompts larger than the current 256 KiB chat message bound are rejected at selection time.
 - Rust is installed under `%USERPROFILE%\.cargo\bin`; terminals that do not inherit that user PATH require the session PATH command shown above.
 - npm may print a non-fatal `could not canonicalize path C:\Users\atrx07` warning in the current host environment.
 - Hardware discovery is partial: no Vulkan loader enumeration, Intel iGPU details, disks, battery/power state, instruction-set report, OpenVINO runtime probe, or robust driver/runtime version inventory exists yet.

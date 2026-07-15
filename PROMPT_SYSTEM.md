@@ -4,6 +4,8 @@
 
 System prompts are first-class, versioned documents. NeuraLoc-Core preserves imported text, makes every composed layer visible, and binds conversations to immutable prompt versions.
 
+Implementation status (2026-07-15): secure import/versioning, the management workspace, adjacent Chat selection, exact selected-version compilation, explicit prompt-change/new-conversation confirmation, and system-role submission are implemented. The current ephemeral conversation binds one selected user prompt layer. Durable conversation references and application tool-policy, project, memory, metadata-precedence, and full layer-inspector flows remain planned.
+
 ## Import format
 
 Supported files are UTF-8 `.md` and `.txt`. UTF-8 BOM is removed. Other invalid encodings produce an actionable error rather than replacement characters. Line endings are preserved in the stored source content.

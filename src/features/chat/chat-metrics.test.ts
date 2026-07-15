@@ -47,4 +47,11 @@ describe("chat metrics", () => {
     expect(calculateChatMetrics([message("user", "x".repeat(500))], 100).contextPercent).toBe(100);
     expect(estimateTokenCount("")).toBe(0);
   });
+
+  it("includes a selected system prompt before backend usage is available", () => {
+    const metrics = calculateChatMetrics([], 4_096, 120);
+    expect(metrics.contextTokens).toBe(120);
+    expect(metrics.contextApproximate).toBe(true);
+    expect(metrics.contextPercent).toBe(3);
+  });
 });

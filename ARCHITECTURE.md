@@ -133,6 +133,8 @@ Repositories own SQL and return domain records. Migrations are ordered, transact
 
 React state is split into UI session state, persisted user settings, and server-derived snapshots. Zustand stores own only their feature state. TanStack Query may be introduced for cached IPC reads once request volume warrants it.
 
+The mounted Chat workspace holds an immutable selected prompt version for the current ephemeral conversation. It refreshes latest library summaries after Prompt Library navigation without replacing an older bound version. Generation places the exact compiled prompt content first with the `system` role; changing the selection after a turn explicitly starts a new conversation. SQLite-backed conversation ownership replaces this renderer binding in the persistence checkpoint.
+
 ## SQLite schema
 
 SQLite runs in WAL mode with foreign keys enabled and a busy timeout. Large files stay outside the database.
@@ -301,8 +303,14 @@ Commands are versioned at the Rust type level. Breaking payload changes create a
 | `cancel_job` | job ID | accepted/current state |
 | `list_prompts` | search/filter | prompt summaries |
 | `import_prompt` | granted path | profile and immutable version |
+| `create_prompt` | stable name and document | profile and immutable version 1 |
 | `save_prompt` | profile ID/base version/content | new immutable version |
-| `compile_prompt` | layers and version IDs | exact content and token estimate |
+| `get_prompt_version` | immutable version ID | exact source, content, metadata, and provenance |
+| `duplicate_prompt` | source version and optional name | new profile/version with provenance |
+| `set_prompt_pinned` | profile ID and pin state | updated prompt summary |
+| `delete_prompt` | profile ID | soft-delete result |
+| `export_prompt` | version ID and original/normalized mode | file name and document content |
+| `compile_prompt` | immutable version ID | exact selected-prompt content and approximate token estimate |
 | `list_conversations` | search/page | conversation summaries |
 | `send_chat_message` | conversation/message/settings | job ID |
 | `get_diagnostics` | redaction level | diagnostics bundle preview |

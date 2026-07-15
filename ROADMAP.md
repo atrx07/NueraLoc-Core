@@ -26,7 +26,7 @@ Status: in progress. Local GGUF indexing, basic metadata inspection, owned-proce
 
 ## Phase 3: Prompt Library
 
-Status: in progress. The bounded Markdown/text parser, validated YAML metadata, immutable profile/version repository, duplicate detection, provenance, soft deletion, export/compile service, migration, and typed native commands are implemented. The management interface, editor, adjacent Chat selector, and immutable conversation binding remain pending.
+Status: in progress. Secure Markdown/text import, immutable versions, search, pinning, duplication, editor, export, adjacent Chat selection, explicit mid-chat change handling, and ephemeral immutable version binding are implemented. Durable conversation references and the future multi-layer compiled prompt inspector remain pending.
 
 - Markdown/text import, drag/drop, YAML parsing, immutable versions.
 - Search, tags, collections, favorites, editor, export.

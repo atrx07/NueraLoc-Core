@@ -290,3 +290,65 @@ export interface ChatUsageEvent {
   messageId: string;
   usage: ChatUsage;
 }
+
+export interface PromptMetadata {
+  name: string | null;
+  declaredVersion: string | null;
+  description: string | null;
+  tags: string[];
+  recommendedModels: string[];
+  temperature: number | null;
+  topP: number | null;
+  topK: number | null;
+  contextReserve: number | null;
+  collection: string | null;
+  extra: Record<string, unknown>;
+}
+
+export interface PromptSummary {
+  profileId: string;
+  stableName: string;
+  collection: string | null;
+  pinned: boolean;
+  latestVersionId: string;
+  latestVersion: number;
+  description: string | null;
+  tags: string[];
+  sourcePath: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PromptVersionRecord {
+  id: string;
+  profileId: string;
+  version: number;
+  sourcePath: string | null;
+  sourceHash: string;
+  metadata: PromptMetadata;
+  content: string;
+  rawDocument: string;
+  sourceProfileId: string | null;
+  sourceVersionId: string | null;
+  createdAt: string;
+}
+
+export interface PromptMutationOutcome {
+  prompt: PromptSummary;
+  version: PromptVersionRecord;
+  alreadyExists: boolean;
+}
+
+export type PromptExportMode = "original" | "normalized";
+
+export interface PromptExport {
+  fileName: string;
+  content: string;
+}
+
+export interface CompiledPrompt {
+  versionId: string;
+  content: string;
+  estimatedTokens: number;
+  approximate: boolean;
+}

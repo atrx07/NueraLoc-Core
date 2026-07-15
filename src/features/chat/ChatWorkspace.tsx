@@ -6,6 +6,7 @@ import {
   Bot,
   Cpu,
   Download,
+  FileText,
   Gauge,
   ImagePlus,
   LoaderCircle,
@@ -23,8 +24,10 @@ import type {
   ChatGenerationState,
   ChatMessageInput,
   ChatUsage,
+  CompiledPrompt,
   EngineRuntimeStatus,
   ModelRecord,
+  PromptSummary,
 } from "../../types/domain";
 import { calculateChatMetrics } from "./chat-metrics";
 import {
@@ -33,8 +36,10 @@ import {
   isEngineActive,
   isSelectedModelReady,
 } from "./model-selection";
+import { chatMessagesWithSystemPrompt, rememberedPrompt } from "./prompt-selection";
 
 const LAST_MODEL_KEY = "neuraloc.lastModelId";
+const LAST_PROMPT_KEY = "neuraloc.lastPromptVersionId";
 const AUTO_SCROLL_THRESHOLD_PX = 48;
 
 type MessageState = "pending" | "streaming" | "complete" | "cancelled" | "error";
@@ -47,11 +52,20 @@ interface LocalMessage {
   usage: ChatUsage | null;
 }
 
+interface PromptBinding extends CompiledPrompt {
+  profileId: string;
+  stableName: string;
+  version: number;
+}
+
 export function ChatWorkspace() {
+  const activeView = useAppStore((state) => state.activeView);
   const setActiveView = useAppStore((state) => state.setActiveView);
   const [models, setModels] = useState<ModelRecord[]>([]);
+  const [prompts, setPrompts] = useState<PromptSummary[]>([]);
   const [runtimeStatus, setRuntimeStatus] = useState<EngineRuntimeStatus | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [selectedPrompt, setSelectedPrompt] = useState<PromptBinding | null>(null);
   const [modelOperation, setModelOperation] = useState<"load" | "stop" | null>(null);
   const [conversationId, setConversationId] = useState(() => crypto.randomUUID());
   const [messages, setMessages] = useState<LocalMessage[]>([]);
@@ -64,15 +78,18 @@ export function ChatWorkspace() {
   const usageSequences = useRef(new Map<string, number>());
   const messageViewport = useRef<HTMLDivElement | null>(null);
   const autoScrollToBottom = useRef(true);
+  const previousView = useRef(activeView);
 
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
     try {
-      const [availableModels, status] = await Promise.all([
+      const [availableModels, status, availablePrompts] = await Promise.all([
         bridge.listModels(),
         bridge.getEngineStatus(),
+        bridge.listPrompts(),
       ]);
       setModels(availableModels);
+      setPrompts(availablePrompts);
       setRuntimeStatus(status);
       const activeModel = status.modelId && isEngineActive(status)
         && availableModels.some((model) => model.id === status.modelId && model.verificationState === "ready")
@@ -84,8 +101,10 @@ export function ChatWorkspace() {
         ? storedModel
         : null;
       setSelectedModelId(activeModel ?? rememberedModel);
+      const prompt = rememberedPrompt(availablePrompts, readLastPromptId());
+      if (prompt) setSelectedPrompt(await compilePromptBinding(prompt));
     } catch (caught) {
-      setError(errorMessage(caught, "Chat could not load the local model library."));
+      setError(errorMessage(caught, "Chat could not load local models and prompts."));
     } finally {
       setLoading(false);
     }
@@ -94,6 +113,15 @@ export function ChatWorkspace() {
   useEffect(() => {
     void loadWorkspace();
   }, [loadWorkspace]);
+
+  useEffect(() => {
+    const previous = previousView.current;
+    previousView.current = activeView;
+    if (activeView !== "chat" || previous !== "prompts") return;
+    void bridge.listPrompts()
+      .then(setPrompts)
+      .catch((caught) => setError(errorMessage(caught, "The prompt library could not be refreshed.")));
+  }, [activeView]);
 
   useEffect(() => {
     let disposed = false;
@@ -163,8 +191,12 @@ export function ChatWorkspace() {
   const runtimeAvailable = runtimeStatus?.lifecycle !== "notInstalled";
   const runtimeActive = isEngineActive(runtimeStatus);
   const chatMetrics = useMemo(
-    () => calculateChatMetrics(messages, runtimeActive ? runtimeStatus?.contextSize ?? null : null),
-    [messages, runtimeActive, runtimeStatus?.contextSize],
+    () => calculateChatMetrics(
+      messages,
+      runtimeActive ? runtimeStatus?.contextSize ?? null : null,
+      selectedPrompt?.estimatedTokens ?? 0,
+    ),
+    [messages, runtimeActive, runtimeStatus?.contextSize, selectedPrompt?.estimatedTokens],
   );
 
   async function selectModel(value: string) {
@@ -184,6 +216,31 @@ export function ChatWorkspace() {
     setSelectedModelId(model.id);
     writeLastModelId(model.id);
     await loadModel(model);
+  }
+
+  async function selectPrompt(value: string) {
+    if (value === "manage") {
+      setActiveView("prompts");
+      return;
+    }
+    const summary = value === "none"
+      ? null
+      : prompts.find((prompt) => prompt.latestVersionId === value) ?? null;
+    if (value !== "none" && !summary) return;
+    if (selectedPrompt?.versionId === value || (!selectedPrompt && value === "none")) return;
+    setError(null);
+    try {
+      const binding = summary ? await compilePromptBinding(summary) : null;
+      if (messages.length > 0) {
+        const confirmed = await bridge.confirmPromptConversationChange(binding?.stableName ?? "no custom prompt");
+        if (!confirmed) return;
+        await newConversation();
+      }
+      setSelectedPrompt(binding);
+      writeLastPromptId(binding?.versionId ?? null);
+    } catch (caught) {
+      setError(errorMessage(caught, "The selected prompt version could not be compiled."));
+    }
   }
 
   async function loadModel(model: ModelRecord) {
@@ -248,7 +305,7 @@ export function ChatWorkspace() {
       .filter((message) => message.role === "user" || message.state === "complete")
       .filter((message) => message.content.length > 0)
       .map((message) => ({ role: message.role, content: message.content }));
-    const requestMessages = [...history, { role: "user" as const, content }];
+    const requestMessages = chatMessagesWithSystemPrompt(selectedPrompt?.content ?? null, history, content);
     autoScrollToBottom.current = true;
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setInput("");
@@ -328,7 +385,7 @@ export function ChatWorkspace() {
       <div className="rail-search"><Search size={15} /><input aria-label="Search conversations" disabled placeholder="Search conversations" /></div>
       <div className="conversation-list">
         {messages.length > 0
-          ? <button className="conversation-item active" type="button"><span>Current conversation</span><small>{selectedModel?.displayName ?? "Local chat"}</small></button>
+          ? <button className="conversation-item active" type="button"><span>Current conversation</span><small>{selectedModel?.displayName ?? "Local chat"}{selectedPrompt ? ` / ${selectedPrompt.stableName} v${selectedPrompt.version}` : ""}</small></button>
           : <div className="conversation-empty">No conversations yet</div>}
       </div>
     </aside>
@@ -349,7 +406,18 @@ export function ChatWorkspace() {
           </optgroup>}
           <option value="manage">Manage models...</option>
         </select></label>
-        <label>System prompt<select defaultValue="default" onChange={(event) => { if (event.target.value === "manage") setActiveView("prompts"); }}><option value="default">No custom prompt</option><option value="manage">Manage prompt library...</option></select></label>
+        <label>System prompt<select
+          aria-label="System prompt"
+          disabled={loading || generating}
+          onChange={(event) => void selectPrompt(event.target.value)}
+          value={selectedPrompt?.versionId ?? "none"}
+        >
+          <option value="none">No custom prompt</option>
+          {selectedPrompt && !prompts.some((prompt) => prompt.latestVersionId === selectedPrompt.versionId)
+            && <option value={selectedPrompt.versionId}>{selectedPrompt.stableName} / v{selectedPrompt.version} (bound)</option>}
+          {prompts.map((prompt) => <option key={prompt.latestVersionId} value={prompt.latestVersionId}>{prompt.pinned ? "Pinned - " : ""}{prompt.stableName} / v{prompt.latestVersion}</option>)}
+          <option value="manage">Manage prompt library...</option>
+        </select></label>
         <div className={`chat-runtime-state ${runtimeStatus?.lifecycle ?? "installed"}`}>
           {modelOperation === "load" || loading ? <LoaderCircle className="spin" size={14} /> : <span />}
           <small>{statusCopy}</small>
@@ -413,6 +481,7 @@ export function ChatWorkspace() {
         </div>
         <div title="Current generation state"><Activity size={13} /><span>{generating ? "Generating" : modelOperation === "load" ? "Loading" : modelReady ? "Ready" : "Idle"}</span></div>
         <div title="Tokens in the latest response"><span>Output</span><strong>{tokenMetric(chatMetrics.outputTokens, chatMetrics.outputApproximate)}</strong></div>
+        <div className="prompt-route" title="Immutable system prompt bound to this conversation"><FileText size={13} /><span>Prompt</span><strong>{selectedPrompt ? `${selectedPrompt.stableName} v${selectedPrompt.version}` : "None"}</strong></div>
         <div title="Latest measured generation speed"><span>Speed</span><strong>{chatMetrics.tokensPerSecond && chatMetrics.tokensPerSecond > 0 ? `${chatMetrics.tokensPerSecond.toFixed(1)} tok/s` : "--"}</strong></div>
         <div className="runtime-route" title="Active inference route and backend build"><Cpu size={13} /><span>{runtimeActive ? `CPU / ${runtimeStatus?.backendVersion ?? "llama.cpp"}` : "CPU / offline"}</span></div>
       </div>
@@ -486,6 +555,36 @@ function writeLastModelId(modelId: string | null) {
     else window.localStorage.removeItem(LAST_MODEL_KEY);
   } catch {
     // A blocked renderer storage preference must not block local inference.
+  }
+}
+
+async function compilePromptBinding(prompt: PromptSummary): Promise<PromptBinding> {
+  const compiled = await bridge.compilePrompt(prompt.latestVersionId);
+  if (new Blob([compiled.content]).size > 256 * 1024) {
+    throw new Error("This prompt exceeds the current 256 KiB chat system-message limit.");
+  }
+  return {
+    ...compiled,
+    profileId: prompt.profileId,
+    stableName: prompt.stableName,
+    version: prompt.latestVersion,
+  };
+}
+
+function readLastPromptId(): string | null {
+  try {
+    return window.localStorage.getItem(LAST_PROMPT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeLastPromptId(versionId: string | null) {
+  try {
+    if (versionId) window.localStorage.setItem(LAST_PROMPT_KEY, versionId);
+    else window.localStorage.removeItem(LAST_PROMPT_KEY);
+  } catch {
+    // A blocked renderer storage preference must not change conversation behavior.
   }
 }
 

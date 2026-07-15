@@ -367,6 +367,15 @@ mod tests {
     fn validates_bounded_chat_requests() {
         assert!(validate_request(&valid_request()).is_ok());
         let mut request = valid_request();
+        request.messages.insert(
+            0,
+            ChatMessage {
+                role: ChatRole::System,
+                content: "Review precisely.".into(),
+            },
+        );
+        assert!(validate_request(&request).is_ok());
+        let mut request = valid_request();
         request.messages[0].role = ChatRole::Assistant;
         assert!(validate_request(&request).is_err());
         let mut request = valid_request();

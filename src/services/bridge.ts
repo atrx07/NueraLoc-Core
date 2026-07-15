@@ -20,6 +20,12 @@ import type {
   ModelRecord,
   ModelScanProgress,
   ModelScanSummary,
+  CompiledPrompt,
+  PromptExport,
+  PromptExportMode,
+  PromptMutationOutcome,
+  PromptSummary,
+  PromptVersionRecord,
   StartChatGenerationRequest,
 } from "../types/domain";
 
@@ -134,6 +140,15 @@ export const bridge = {
       title: "Import a verified llama.cpp package",
       multiple: false,
       filters: [{ name: "ZIP archive", extensions: ["zip"] }],
+    });
+  },
+
+  async choosePromptFile(): Promise<string | null> {
+    if (!isTauri()) return null;
+    return open({
+      title: "Import a system prompt",
+      multiple: false,
+      filters: [{ name: "Prompt document", extensions: ["md", "txt"] }],
     });
   },
 
@@ -282,6 +297,103 @@ export const bridge = {
     return invoke<void>("remove_model_record", { request: { modelId } });
   },
 
+  async listPrompts(query = ""): Promise<PromptSummary[]> {
+    if (!isTauri()) {
+      const prompt = demoPromptSummary();
+      const needle = query.trim().toLocaleLowerCase();
+      return !needle || [prompt.stableName, prompt.collection, ...prompt.tags]
+        .some((value) => value?.toLocaleLowerCase().includes(needle)) ? [prompt] : [];
+    }
+    return invoke<PromptSummary[]>("list_prompts", { request: { query: query || null } });
+  },
+
+  async importPrompt(path: string): Promise<PromptMutationOutcome> {
+    if (!isTauri()) throw new Error("Prompt import is available in the desktop app.");
+    return invoke<PromptMutationOutcome>("import_prompt", { request: { path } });
+  },
+
+  async createPrompt(name: string, content: string): Promise<PromptMutationOutcome> {
+    if (!isTauri()) throw new Error("Prompt creation is available in the desktop app.");
+    return invoke<PromptMutationOutcome>("create_prompt", { request: { name, content } });
+  },
+
+  async savePrompt(profileId: string, baseVersionId: string, document: string): Promise<PromptMutationOutcome> {
+    if (!isTauri()) throw new Error("Prompt editing is available in the desktop app.");
+    return invoke<PromptMutationOutcome>("save_prompt", {
+      request: { profileId, baseVersionId, document },
+    });
+  },
+
+  async getPromptVersion(versionId: string): Promise<PromptVersionRecord> {
+    if (!isTauri()) {
+      if (versionId === demoPromptSummary().latestVersionId) return demoPromptVersion();
+      throw new Error("The demo prompt version was not found.");
+    }
+    return invoke<PromptVersionRecord>("get_prompt_version", { request: { versionId } });
+  },
+
+  async duplicatePrompt(versionId: string, name: string | null = null): Promise<PromptMutationOutcome> {
+    if (!isTauri()) throw new Error("Prompt duplication is available in the desktop app.");
+    return invoke<PromptMutationOutcome>("duplicate_prompt", { request: { versionId, name } });
+  },
+
+  async setPromptPinned(profileId: string, pinned: boolean): Promise<PromptSummary> {
+    if (!isTauri()) throw new Error("Prompt pinning is available in the desktop app.");
+    return invoke<PromptSummary>("set_prompt_pinned", { request: { profileId, pinned } });
+  },
+
+  async deletePrompt(profileId: string): Promise<void> {
+    if (!isTauri()) throw new Error("Prompt deletion is available in the desktop app.");
+    return invoke<void>("delete_prompt", { request: { profileId } });
+  },
+
+  async exportPrompt(versionId: string, mode: PromptExportMode): Promise<PromptExport> {
+    if (!isTauri()) {
+      const prompt = demoPromptVersion();
+      if (versionId !== prompt.id) throw new Error("The demo prompt version was not found.");
+      const normalizedMetadata = {
+        name: prompt.metadata.name,
+        description: prompt.metadata.description,
+        tags: prompt.metadata.tags,
+        collection: prompt.metadata.collection,
+      };
+      const normalized = `---\n${JSON.stringify(normalizedMetadata, null, 2)}\n---\n${prompt.content}`;
+      return { fileName: "local-code-reviewer.md", content: mode === "original" ? prompt.rawDocument : normalized };
+    }
+    return invoke<PromptExport>("export_prompt", { request: { versionId, mode } });
+  },
+
+  async compilePrompt(versionId: string): Promise<CompiledPrompt> {
+    if (!isTauri()) {
+      const prompt = demoPromptVersion();
+      if (versionId !== prompt.id) throw new Error("The demo prompt version was not found.");
+      return { versionId, content: prompt.content, estimatedTokens: Math.ceil(prompt.content.length / 4), approximate: true };
+    }
+    return invoke<CompiledPrompt>("compile_prompt", { request: { versionId } });
+  },
+
+  async confirmDeletePrompt(name: string): Promise<boolean> {
+    const message = `Delete ${name} from the prompt library? Existing historical references will remain readable.`;
+    if (!isTauri()) return window.confirm(message);
+    return confirm(message, {
+      title: "Delete prompt",
+      kind: "warning",
+      okLabel: "Delete",
+      cancelLabel: "Keep",
+    });
+  },
+
+  async confirmPromptConversationChange(name: string): Promise<boolean> {
+    const message = `Start a new conversation with ${name}? The current in-memory conversation will be cleared.`;
+    if (!isTauri()) return window.confirm(message);
+    return confirm(message, {
+      title: "Change system prompt",
+      kind: "info",
+      okLabel: "New conversation",
+      cancelLabel: "Keep current",
+    });
+  },
+
   async confirmRemoveModel(displayName: string): Promise<boolean> {
     const message = `Remove ${displayName} from the library? The GGUF file will stay on disk.`;
     if (!isTauri()) return window.confirm(message);
@@ -340,5 +452,50 @@ function demoEngineStatus(): EngineRuntimeStatus {
     endedAt: null,
     exitCode: null,
     detail: "Install and verify the llama.cpp CPU runtime to load a model.",
+  };
+}
+
+function demoPromptSummary(): PromptSummary {
+  return {
+    profileId: "demo-prompt-profile",
+    stableName: "Local code reviewer",
+    collection: "Coding",
+    pinned: true,
+    latestVersionId: "demo-prompt-version-2",
+    latestVersion: 2,
+    description: "Reviews code for correctness, security, and missing tests.",
+    tags: ["code", "review"],
+    sourcePath: null,
+    createdAt: "2026-07-14T09:00:00Z",
+    updatedAt: "2026-07-15T09:00:00Z",
+  };
+}
+
+function demoPromptVersion(): PromptVersionRecord {
+  const document = "---\nname: Local code reviewer\ndescription: Reviews code for correctness, security, and missing tests.\ntags: [code, review]\ncollection: Coding\n---\nReview the user's code precisely. Lead with correctness and security findings, then identify missing tests.";
+  return {
+    id: "demo-prompt-version-2",
+    profileId: "demo-prompt-profile",
+    version: 2,
+    sourcePath: null,
+    sourceHash: "47232cb6e67540cabbb15115f53a243a64a77093db61308450600c78a72260f9",
+    metadata: {
+      name: "Local code reviewer",
+      declaredVersion: null,
+      description: "Reviews code for correctness, security, and missing tests.",
+      tags: ["code", "review"],
+      recommendedModels: [],
+      temperature: null,
+      topP: null,
+      topK: null,
+      contextReserve: null,
+      collection: "Coding",
+      extra: {},
+    },
+    content: "Review the user's code precisely. Lead with correctness and security findings, then identify missing tests.",
+    rawDocument: document,
+    sourceProfileId: null,
+    sourceVersionId: null,
+    createdAt: "2026-07-15T09:00:00Z",
   };
 }
